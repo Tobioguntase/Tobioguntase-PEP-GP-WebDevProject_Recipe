@@ -16,15 +16,41 @@ window.addEventListener("DOMContentLoaded", () => {
      * - Admin link and logout button
      * - Search input
     */
+    const adminLink = document.getElementById("admin-link");
+    const logoutButton = document.getElementById("logout-button");
+
+    const searchInput = document.getElementById("search-input");
+    const searchButton = document.getElementById("search-button");
+
+    const recipeList = document.getElementById("recipe-list");
+
+    const addNameInput = document.getElementById("add-recipe-name-input"); 
+    const addInstructionsInput = document.getElementById("add-recipe-instructions-input");
+    const addButton = document.getElementById("add-recipe-submit-input");
+
+    const updateNameInput = document.getElementById("update-recipe-name-input");
+    const updateInstructionsInput = document.getElementById("update-recipe-instructions-input");
+    const updateButton = document.getElementById("update-recipe-submit-input");
+
+    const deleteNameInput = document.getElementById("delete-recipe-name-input");
+    const deleteButton = document.getElementById("delete-recipe-submit-input");
+
+    const token = sessionStorage.getItem("auth-token");
+    const isAdmin = sessionStorage.getItem("is-admin");
 
     /*
      * TODO: Show logout button if auth-token exists in sessionStorage
      */
-
+    if(token && logoutButton) {
+        logoutButton.style.display = "inline-block";
+    }
+    
     /*
      * TODO: Show admin link if is-admin flag in sessionStorage is "true"
      */
-
+    if (isAdmin === "true" && adminLink) {
+        adminLink.style.display = "inline-block";
+    }
     /*
      * TODO: Attach event handlers
      * - Add recipe button → addRecipe()
@@ -34,9 +60,17 @@ window.addEventListener("DOMContentLoaded", () => {
      * - Logout button → processLogout()
      */
 
+    if (addButton) addButton.onclick = addRecipe;    
+    if (updateButton) updateButton.onclick = updateRecipe; 
+    if (deleteButton) deleteButton.onclick = deleteRecipe; 
+    if (searchButton) searchButton.onclick = searchRecipes;
+    if (logoutButton) logoutButton.onclick = processLogout; 
+
+
     /*
      * TODO: On page load, call getRecipes() to populate the list
      */
+    getRecipes(); 
 
 
     /**
@@ -47,7 +81,21 @@ window.addEventListener("DOMContentLoaded", () => {
      * - Handle fetch errors and alert user
      */
     async function searchRecipes() {
-        // Implement search logic here
+        const term = searchInput.value.trim().toLowerCase();
+        try {
+            await getRecipes();
+            recipes = recipes.filter(r => r.name.toLowerCase().includes(term));
+            refreshRecipeList(); 
+            /* const res = await fetch(`${BASE_URL}/recipes?name=${encodeURIComponent(term)}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (!res.ok) throw new Error("Failed to search recipes");
+            recipes = await res.json();
+            refreshRecipeList();*/
+        } catch (error) {
+            console.error(error);
+            alert("Error searching recipes");
+        }
     }
 
     /**
@@ -59,7 +107,45 @@ window.addEventListener("DOMContentLoaded", () => {
      * - On success: clear inputs, fetch latest recipes, refresh the list
      */
     async function addRecipe() {
-        // Implement add logic here
+        const name = addNameInput.value.trim();
+        const instructions = addInstructionsInput.value.trim();
+
+        if (!name || !instructions) {
+            alert("Please enter both name and instructions");
+            return;
+        }
+
+        if (!token) {
+            alert("You must be logged in to add a recipe");
+            return;
+        }
+
+        try {
+            const res = await fetch(`${BASE_URL}/recipes`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify({ name, instructions })
+            });
+
+            if (!res.ok) {
+                const errorText = await res.text();
+                console.error("Backend error:", res.status, errorText);
+                alert("Failed to add recipe");
+                return; 
+            }
+
+            addNameInput.value = "";
+            addInstructionsInput.value = "";
+
+            await getRecipes();
+        } catch (err) {
+            console.error(err);
+            alert("Error adding recipe");
+        }
+
     }
 
     /**
@@ -71,7 +157,39 @@ window.addEventListener("DOMContentLoaded", () => {
      * - On success: clear inputs, fetch latest recipes, refresh the list
      */
     async function updateRecipe() {
-        // Implement update logic here
+        const name = updateNameInput.value.trim();
+        const instructions = updateInstructionsInput.value.trim();
+        if (!name || !instructions) {
+            alert("Please enter both name and updated instructions");
+            return;
+        }
+
+        
+        await getRecipes(); 
+        const recipe = recipes.find(r => r.name === name);
+        if (!recipe) {
+            alert("Recipe not found");
+            return;
+        }
+
+        try {
+            const res = await fetch(`${BASE_URL}/recipes/${recipe.id}`, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(token && { Authorization: `Bearer ${token}` })
+                },
+                body: JSON.stringify({ name, instructions })
+            });
+            if (!res.ok) throw new Error("Failed to update recipe");
+
+            updateNameInput.value = "";
+            updateInstructionsInput.value = "";
+            await getRecipes();
+        } catch (error) {
+            console.error(error);
+            alert("Error updating recipe");
+        }
     }
 
     /**
@@ -82,7 +200,36 @@ window.addEventListener("DOMContentLoaded", () => {
      * - On success: refresh the list
      */
     async function deleteRecipe() {
-        // Implement delete logic here
+        const name = deleteNameInput.value.trim();
+        if (!name) {
+            alert("Please enter a recipe name");
+            return;
+        }
+
+
+
+        await getRecipes(); 
+        const recipe = recipes.find(r => r.name === name);
+        if (!recipe) {
+            alert("Recipe not found");
+            return;
+        }
+
+
+
+        try {
+            const res = await fetch(`${BASE_URL}/recipes/${recipe.id}`, {
+                method: "DELETE",
+                headers: token ? { Authorization: `Bearer ${token}` } : {}
+            });
+            if (!res.ok) throw new Error("Failed to delete recipe");
+
+            deleteNameInput.value = "";
+            await getRecipes();
+        } catch (error) {
+            console.error(error);
+            alert("Error deleting recipe");
+        }
     }
 
     /**
@@ -92,7 +239,18 @@ window.addEventListener("DOMContentLoaded", () => {
      * - Call refreshRecipeList() to display
      */
     async function getRecipes() {
-        // Implement get logic here
+        try {
+            const headers = {};
+            if (token) headers["Authorization"] = `Bearer ${token}`;
+
+            const res = await fetch(`${BASE_URL}/recipes`, { headers });
+            if (!res.ok) throw new Error("Failed to fetch recipes");
+            recipes = await res.json();
+            refreshRecipeList();
+        } catch (error) {
+            console.error(error);
+            alert("Error fetching recipes");
+        }
     }
 
     /**
@@ -102,7 +260,12 @@ window.addEventListener("DOMContentLoaded", () => {
      * - Append to list container
      */
     function refreshRecipeList() {
-        // Implement refresh logic here
+        recipeList.innerHTML = "";
+        recipes.forEach(r => {
+            const li = document.createElement("li");
+            li.textContent = `${r.name}: ${r.instructions}`;
+            recipeList.appendChild(li);
+        });
     }
 
     /**
@@ -113,7 +276,20 @@ window.addEventListener("DOMContentLoaded", () => {
      * - On failure: alert the user
      */
     async function processLogout() {
-        // Implement logout logic here
+         try {
+            const res = await fetch(`${BASE_URL}/logout`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (!res.ok) throw new Error("Failed to logout");
+
+            sessionStorage.clear();
+            window.location.href = "../login/login-page.html";
+        } catch (err) {
+            console.error(err);
+            alert("Error logging out");
+        }
     }
 
 });
+
